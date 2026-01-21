@@ -1,117 +1,168 @@
 import json
 import os
+import tkinter as tk
+from tkinter import messagebox
 from datetime import datetime, timedelta
 
-DB_FILE = "todo_list.json"
+DB_FILE = "todo_gui_light.json"
 DATE_FORMAT = "%d.%m.%Y %H:%M"
 
-def load_tasks():
-    if not os.path.exists(DB_FILE):
+class TodoApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Green Task Manager 2026")
+        self.root.geometry("650x550")
+        
+        # Цветовая палитра (Светлая)
+        self.bg_main = "#FFFFFF"        # Чистый белый фон
+        self.bg_accent = "#F0F9F0"      # Очень светлый зеленый для полей
+        self.fg_main = "#2D3436"        # Темно-серый текст (лучше читается, чем черный)
+        self.brand_green = "#27AE60"    # Насыщенный зеленый акцент
+        self.light_green = "#DFF9FB"    # Цвет выделения
+        
+        self.root.configure(bg=self.bg_main)
+        self.tasks = self.load_tasks()
+        self.setup_ui()
+        self.refresh_list()
+
+    def setup_ui(self):
+        # Заголовок
+        header_frame = tk.Frame(self.root, bg=self.brand_green)
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        label = tk.Label(header_frame, text="Мои Задачи", font=("Segoe UI", 18, "bold"),
+                         bg=self.brand_green, fg="white", pady=15)
+        label.pack()
+
+        # Фрейм для ввода
+        input_frame = tk.Frame(self.root, bg=self.bg_main)
+        input_frame.pack(pady=10, padx=30, fill="x")
+
+        # Поле задачи
+        tk.Label(input_frame, text="Что нужно сделать?", font=("Segoe UI", 10),
+                 bg=self.bg_main, fg=self.fg_main).grid(row=0, column=0, sticky="w")
+        self.task_entry = tk.Entry(input_frame, bg=self.bg_accent, fg=self.fg_main, 
+                                   font=("Segoe UI", 11), borderwidth=1, relief="flat")
+        self.task_entry.grid(row=1, column=0, padx=(0, 10), pady=(5, 15), sticky="ew")
+
+        # Поле дедлайна
+        tk.Label(input_frame, text="Дедлайн (ДД.ММ.ГГГГ ЧЧ:ММ)", font=("Segoe UI", 10),
+                 bg=self.bg_main, fg=self.fg_main).grid(row=0, column=1, sticky="w")
+        self.deadline_entry = tk.Entry(input_frame, bg=self.bg_accent, fg=self.fg_main, 
+                                       font=("Segoe UI", 11), borderwidth=1, relief="flat")
+        self.deadline_entry.grid(row=1, column=1, pady=(5, 15), sticky="ew")
+        
+        input_frame.columnconfigure(0, weight=3)
+        input_frame.columnconfigure(1, weight=2)
+
+        # Кнопки управления
+        btn_frame = tk.Frame(self.root, bg=self.bg_main)
+        btn_frame.pack(pady=10)
+
+        style_btn = {"font": ("Segoe UI", 9, "bold"), "fg": "white", "relief": "flat", "padx": 15, "pady": 5}
+
+        self.add_btn = tk.Button(btn_frame, text="ДОБАВИТЬ", command=self.add_task, 
+                                 bg=self.brand_green, activebackground="#219150", **style_btn)
+        self.add_btn.pack(side="left", padx=5)
+
+        self.done_btn = tk.Button(btn_frame, text="ВЫПОЛНЕНО", command=self.mark_done, 
+                                  bg="#2980B9", activebackground="#2471A3", **style_btn)
+        self.done_btn.pack(side="left", padx=5)
+
+        self.del_btn = tk.Button(btn_frame, text="УДАЛИТЬ", command=self.delete_task, 
+                                 bg="#E74C3C", activebackground="#C0392B", **style_btn)
+        self.del_btn.pack(side="left", padx=5)
+
+        # Список задач
+        list_frame = tk.Frame(self.root, bg=self.bg_main)
+        list_frame.pack(pady=10, padx=30, fill="both", expand=True)
+
+        self.listbox = tk.Listbox(list_frame, bg=self.bg_accent, fg=self.fg_main, 
+                                  selectbackground=self.brand_green, selectforeground="white",
+                                  font=("Segoe UI", 11), borderwidth=0, highlightthickness=0)
+        self.listbox.pack(side="left", fill="both", expand=True)
+        
+        scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=self.listbox.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.listbox.config(yscrollcommand=scrollbar.set)
+
+    def load_tasks(self):
+        if os.path.exists(DB_FILE):
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
         return []
-    with open(DB_FILE, "r", encoding="utf-8") as f:
+
+    def save_tasks(self):
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.tasks, f, ensure_ascii=False, indent=4)
+
+    def check_priority(self, deadline_str):
+        if not deadline_str: return "ПЛАН", 3
         try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
+            deadline = datetime.strptime(deadline_str, DATE_FORMAT)
+            diff = deadline - datetime.now()
+            if diff < timedelta(hours=4):
+                return "СРОЧНО!", 1
+            return "В СРОК", 2
+        except:
+            return "БЕЗ ДАТЫ", 4
 
-def save_tasks(tasks):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(tasks, f, ensure_ascii=False, indent=4)
+    def add_task(self):
+        text = self.task_entry.get()
+        deadline = self.deadline_entry.get()
+        if not text:
+            messagebox.showwarning("Ввод", "Напишите, что нужно сделать")
+            return
 
-def check_priority(deadline_str):
-    """Автоматически определяет приоритет на основе времени до дедлайна."""
-    try:
-        deadline = datetime.strptime(deadline_str, DATE_FORMAT)
-        now = datetime.now()
-        diff = deadline - now
+        p_name, p_val = self.check_priority(deadline)
+        self.tasks.append({
+            "text": text,
+            "deadline": deadline,
+            "done": False
+        })
+        self.save_tasks()
+        self.task_entry.delete(0, tk.END)
+        self.deadline_entry.delete(0, tk.END)
+        self.refresh_list()
+
+    def refresh_list(self):
+        self.listbox.delete(0, tk.END)
+        # Сортировка по дедлайну и статусу выполнения
+        self.tasks.sort(key=lambda x: (x['done'], self.check_priority(x['deadline'])[1]))
         
-        if diff < timedelta(hours=4):
-            return "КРИТИЧЕСКИЙ (горит!)", 0
-        elif diff < timedelta(days=1):
-            return "Высокий", 1
-        else:
-            return "Обычный", 2
-    except:
-        return "Без срока", 3
-
-def show_tasks(tasks):
-    if not tasks:
-        print("\nСписок задач пуст.")
-        return []
-    
-    # Обновляем приоритеты перед показом (за 4 часа статус может измениться)
-    for task in tasks:
-        if task.get("deadline"):
-            p_name, p_val = check_priority(task["deadline"])
-            task["priority"] = p_name
-            task["prio_val"] = p_val
-
-    # Сортировка: сначала невыполненные, затем по весу приоритета, затем по дате
-    sorted_tasks = sorted(tasks, key=lambda x: (x['done'], x.get('prio_val', 3), x.get('deadline', '')))
-    
-    print(f"\n--- Список задач на {datetime.now().strftime(DATE_FORMAT)} ---")
-    for i, task in enumerate(sorted_tasks, 1):
-        status = "[x]" if task["done"] else "[ ]"
-        deadline = task.get("deadline", "нет")
-        print(f"{i}. {status} [{task['priority']}] {task['text']} (Дедлайн: {deadline})")
-    return sorted_tasks
-
-def main():
-    tasks = load_tasks()
-
-    while True:
-        print("\nМеню: 1.Список 2.Добавить 3.Удалить 4.Выполнить 5.Выход")
-        choice = input("Выберите действие: ")
-
-        if choice == "1":
-            show_tasks(tasks)
-        
-        elif choice == "2":
-            text = input("Текст задачи: ")
-            deadline_input = input("Дедлайн (ДД.ММ.ГГГГ ЧЧ:ММ) или Enter: ")
+        for task in self.tasks:
+            status = "✓" if task["done"] else "○"
+            p_name, _ = self.check_priority(task["deadline"])
+            deadline_info = f" [до {task['deadline']}]" if task['deadline'] else ""
             
-            p_name, p_val = "Обычный", 2
-            if deadline_input:
-                try:
-                    # Проверка формата
-                    datetime.strptime(deadline_input, DATE_FORMAT)
-                    p_name, p_val = check_priority(deadline_input)
-                except ValueError:
-                    print("Ошибка формата даты! Будет сохранено без дедлайна.")
-                    deadline_input = None
+            # Визуальный разделитель
+            display_text = f" {status}  {p_name.ljust(8)} | {task['text']}{deadline_info}"
+            self.listbox.insert(tk.END, display_text)
+            
+            # Подкрашиваем срочные задачи красным в списке (опционально)
+            if p_name == "СРОЧНО!" and not task["done"]:
+                self.listbox.itemconfig(tk.END, fg="#E67E22")
 
-            tasks.append({
-                "text": text, 
-                "done": False, 
-                "deadline": deadline_input,
-                "priority": p_name,
-                "prio_val": p_val
-            })
-            save_tasks(tasks)
-            print("Задача добавлена!")
+    def mark_done(self):
+        try:
+            index = self.listbox.curselection()[0]
+            # Нужно найти задачу в исходном списке, так как индексы Listbox и self.tasks совпадают после сортировки
+            self.tasks[index]["done"] = True
+            self.save_tasks()
+            self.refresh_list()
+        except IndexError:
+            messagebox.showwarning("Выбор", "Выберите задачу для отметки")
 
-        elif choice == "3":
-            current = show_tasks(tasks)
-            if current:
-                try:
-                    num = int(input("Номер для удаления: "))
-                    tasks.remove(current[num - 1])
-                    save_tasks(tasks)
-                    print("Удалено.")
-                except: print("Ошибка ввода.")
-
-        elif choice == "4":
-            current = show_tasks(tasks)
-            if current:
-                try:
-                    num = int(input("Номер выполненной: "))
-                    current[num - 1]["done"] = True
-                    save_tasks(tasks)
-                    print("Выполнено!")
-                except: print("Ошибка ввода.")
-
-        elif choice == "5":
-            break
+    def delete_task(self):
+        try:
+            index = self.listbox.curselection()[0]
+            del self.tasks[index]
+            self.save_tasks()
+            self.refresh_list()
+        except IndexError:
+            messagebox.showwarning("Выбор", "Выберите задачу для удаления")
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = TodoApp(root)
+    root.mainloop()

@@ -1,160 +1,277 @@
 import json
 import os
 from datetime import datetime, timedelta
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
 
 TASKS_FILE = 'tasks.json'
 
+# ─── Цветовая схема (светлая + зелёная) ───
+BG_COLOR = "#f8fdf8"           # очень светлый зелёно-белый
+FRAME_BG = "#f0f9f0"
+BTN_BG = "#4CAF50"             # основной зелёный
+BTN_ACTIVE = "#45a049"
+BTN_FG = "white"
+ACCENT = "#2E7D32"             # тёмный зелёный для акцентов
+TEXT_COLOR = "#1B5E20"
+HIGH_PRIORITY_BG = "#fff3e0"   # светлый оранжевый для high
+HIGH_PRIORITY_FG = "#d84315"
+
 def load_tasks():
     if os.path.exists(TASKS_FILE):
-        with open(TASKS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(TASKS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return []
     return []
 
 def save_tasks(tasks):
     with open(TASKS_FILE, 'w', encoding='utf-8') as f:
         json.dump(tasks, f, ensure_ascii=False, indent=4)
 
-def parse_deadline(deadline_str):
-    """Пытается распарсить строку дедлайна в datetime"""
-    if not deadline_str or deadline_str.strip() == "":
-        return None
-    formats = [
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%d %H:%M:%S",
-        "%d.%m.%Y %H:%M",
-        "%d.%m.%Y"
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(deadline_str.strip(), fmt)
-        except ValueError:
-            continue
-    return None
-
-def update_task_priority(task):
-    """Обновляет приоритет задачи в зависимости от дедлайна"""
-    if not task.get('deadline'):
-        task['priority'] = task.get('priority', 'medium')
-        return
-
-    try:
-        deadline = datetime.fromisoformat(task['deadline'])
-        now = datetime.now()
-        time_left = deadline - now
+class TodoApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Задачи — Todo Green")
+        self.root.geometry("780x580")
+        self.root.configure(bg=BG_COLOR)
         
-        if time_left <= timedelta(hours=4) and time_left > timedelta(0):
-            task['priority'] = 'high'
-        elif time_left <= timedelta(0):
-            task['priority'] = 'high'  # просрочено — тоже высокий приоритет
+        self.tasks = load_tasks()
+        
+        self.style = ttk.Style()
+        self.style.theme_use('clam')  # современная тема
+        
+        self.configure_styles()
+        
+        self.create_widgets()
+        self.update_task_list()
+
+    def configure_styles(self):
+        self.style.configure("TButton", font=("Segoe UI", 10), padding=6)
+        self.style.map("TButton",
+            background=[('active', BTN_ACTIVE)],
+            foreground=[('active', 'white')])
+        
+        self.style.configure("Green.TButton",
+            background=BTN_BG,
+            foreground=BTN_FG,
+            font=("Segoe UI", 10, "bold"))
+        
+        self.style.configure("TLabel", background=BG_COLOR, foreground=TEXT_COLOR)
+        self.style.configure("Header.TLabel",
+            font=("Segoe UI", 14, "bold"),
+            background=BG_COLOR,
+            foreground=ACCENT)
+        
+        self.style.configure("Treeview",
+            background=FRAME_BG,
+            fieldbackground=FRAME_BG,
+            foreground=TEXT_COLOR,
+            rowheight=28)
+        
+        self.style.map("Treeview",
+            background=[('selected', ACCENT)],
+            foreground=[('selected', 'white')])
+        
+        self.style.configure("Treeview.Heading",
+            background=BTN_BG,
+            foreground="white",
+            font=("Segoe UI", 10, "bold"))
+        
+        self.style.map("Treeview.Heading",
+            background=[('active', ACCENT)])
+
+    def create_widgets(self):
+        # Заголовок
+        ttk.Label(self.root, text="Мои задачи", style="Header.TLabel").pack(pady=(15, 5))
+        
+        # Основной фрейм со списком
+        main_frame = ttk.Frame(self.root, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Treeview
+        columns = ("id", "priority", "description", "deadline", "status")
+        self.tree = ttk.Treeview(main_frame, columns=columns, show="headings", selectmode="browse")
+        
+        self.tree.heading("id", text="№")
+        self.tree.heading("priority", text="Приоритет")
+        self.tree.heading("description", text="Задача")
+        self.tree.heading("deadline", text="Дедлайн")
+        self.tree.heading("status", text="Статус")
+        
+        self.tree.column("id", width=40, anchor="center")
+        self.tree.column("priority", width=110, anchor="center")
+        self.tree.column("description", width=320)
+        self.tree.column("deadline", width=140, anchor="center")
+        self.tree.column("status", width=90, anchor="center")
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Панель кнопок
+        btn_frame = ttk.Frame(self.root, padding=12)
+        btn_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Button(btn_frame, text="Добавить задачу", style="Green.TButton",
+                   command=self.add_task_dialog).pack(side=tk.LEFT, padx=6)
+        
+        ttk.Button(btn_frame, text="Отметить выполненной", style="Green.TButton",
+                   command=self.mark_completed).pack(side=tk.LEFT, padx=6)
+        
+        ttk.Button(btn_frame, text="Удалить", style="Green.TButton",
+                   command=self.delete_task).pack(side=tk.LEFT, padx=6)
+        
+        ttk.Button(btn_frame, text="Обновить", command=self.update_task_list).pack(side=tk.RIGHT, padx=6)
+
+    def get_priority_tag(self, priority):
+        if priority == "high":
+            return "high"
+        elif priority == "medium":
+            return "medium"
         else:
-            # оставляем как было, если пользователь сам установил
-            if task.get('priority') not in ('low', 'medium', 'high'):
-                task['priority'] = 'medium'
-    except:
-        task['priority'] = 'medium'
+            return "low"
 
-def add_task(tasks):
-    description = input("Описание задачи: ").strip()
-    
-    deadline_str = input("Дедлайн (например 2026-01-22 18:30 или оставьте пустым): ").strip()
-    deadline = parse_deadline(deadline_str)
-    
-    priority = input("Приоритет (low / medium / high) [по умолчанию medium]: ").strip().lower()
-    if priority not in ('low', 'medium', 'high'):
-        priority = 'medium'
-    
-    task = {
-        'id': len(tasks) + 1,
-        'description': description,
-        'completed': False,
-        'priority': priority,
-        'deadline': deadline.isoformat() if deadline else None
-    }
-    
-    # Первоначальная проверка на срочность
-    update_task_priority(task)
-    
-    tasks.append(task)
-    print("Задача добавлена.")
+    def update_task_list(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        now = datetime.now()
+        
+        for task in self.tasks:
+            # Обновляем приоритет по дедлайну
+            if task.get('deadline'):
+                try:
+                    dl = datetime.fromisoformat(task['deadline'])
+                    time_left = dl - now
+                    if time_left <= timedelta(hours=4) and time_left > timedelta(0):
+                        task['priority'] = 'high'
+                    elif time_left <= timedelta(0):
+                        task['priority'] = 'high'
+                except:
+                    pass
+            
+            status = "✓ Выполнено" if task.get('completed', False) else "В работе"
+            deadline_str = ""
+            if task.get('deadline'):
+                try:
+                    dl = datetime.fromisoformat(task['deadline'])
+                    deadline_str = dl.strftime("%Y-%m-%d %H:%M")
+                except:
+                    deadline_str = task['deadline']
+            
+            values = (
+                task['id'],
+                task['priority'].upper(),
+                task['description'],
+                deadline_str,
+                status
+            )
+            
+            iid = self.tree.insert("", "end", values=values)
+            
+            # Теги для раскраски
+            prio = task['priority']
+            if prio == "high":
+                self.tree.item(iid, tags=("high",))
+            elif prio == "medium":
+                self.tree.item(iid, tags=("medium",))
+            else:
+                self.tree.item(iid, tags=("low",))
+            
+            if task.get('completed'):
+                self.tree.item(iid, tags=("completed",))
+        
+        # Настраиваем цвета строк
+        self.tree.tag_configure("high", background=HIGH_PRIORITY_BG, foreground=HIGH_PRIORITY_FG)
+        self.tree.tag_configure("medium", background="#e8f5e9")
+        self.tree.tag_configure("low", background="#f1f8e9")
+        self.tree.tag_configure("completed", foreground="#78909c")
 
-def delete_task(tasks):
-    try:
-        task_id = int(input("ID задачи для удаления: "))
-        tasks[:] = [t for t in tasks if t['id'] != task_id]
-        # перенумеровываем
-        for i, t in enumerate(tasks, 1):
-            t['id'] = i
-        print("Задача удалена.")
-    except:
-        print("Ошибка ввода ID.")
+    def add_task_dialog(self):
+        description = simpledialog.askstring("Новая задача", "Описание задачи:")
+        if not description or not description.strip():
+            return
+            
+        deadline = simpledialog.askstring("Дедлайн", 
+            "Введите дедлайн (например: 2026-01-25 18:30)\nили оставьте пустым",
+            initialvalue="")
+            
+        priority = simpledialog.askstring("Приоритет", 
+            "low / medium / high  (по умолчанию medium)",
+            initialvalue="medium").strip().lower()
+            
+        if priority not in ("low", "medium", "high"):
+            priority = "medium"
+            
+        deadline_iso = None
+        if deadline and deadline.strip():
+            try:
+                # Пробуем разные форматы
+                for fmt in ["%Y-%m-%d %H:%M", "%d.%m.%Y %H:%M", "%Y-%m-%d"]:
+                    try:
+                        dt = datetime.strptime(deadline.strip(), fmt)
+                        deadline_iso = dt.isoformat()
+                        break
+                    except:
+                        continue
+            except:
+                messagebox.showwarning("Формат даты", "Не удалось распознать дату.\nДедлайн не установлен.")
+        
+        new_task = {
+            'id': len(self.tasks) + 1,
+            'description': description.strip(),
+            'completed': False,
+            'priority': priority,
+            'deadline': deadline_iso
+        }
+        
+        self.tasks.append(new_task)
+        save_tasks(self.tasks)
+        self.update_task_list()
+        messagebox.showinfo("Успех", "Задача добавлена!")
 
-def complete_task(tasks):
-    try:
-        task_id = int(input("ID задачи для завершения: "))
-        for task in tasks:
+    def mark_completed(self):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Выбор", "Выберите задачу")
+            return
+            
+        item = self.tree.item(selected[0])
+        task_id = int(item['values'][0])
+        
+        for task in self.tasks:
             if task['id'] == task_id:
-                task['completed'] = True
-                print("Задача отмечена как выполненная.")
-                return
-        print("Задача не найдена.")
-    except:
-        print("Ошибка ввода ID.")
+                task['completed'] = not task['completed']  # можно и снимать галочку
+                break
+                
+        save_tasks(self.tasks)
+        self.update_task_list()
 
-def list_tasks(tasks):
-    if not tasks:
-        print("Список задач пуст.")
-        return
-
-    # Обновляем приоритеты перед выводом
-    for task in tasks:
-        update_task_priority(task)
-
-    print("\nСписок задач:")
-    print("-" * 80)
-    for task in tasks:
-        status = "✓" if task['completed'] else " "
-        deadline_str = ""
-        if task.get('deadline'):
-            dl = datetime.fromisoformat(task['deadline'])
-            deadline_str = f"  до {dl.strftime('%Y-%m-%d %H:%M')}"
+    def delete_task(self):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Выбор", "Выберите задачу")
+            return
+            
+        item = self.tree.item(selected[0])
+        task_id = int(item['values'][0])
         
-        prio = task['priority'].upper()
-        if prio == 'HIGH':
-            prio = f"!!! {prio} !!!"
-        
-        print(f"[{status}]  ID: {task['id']:3d}  |  {prio:>8}  |  {task['description']}{deadline_str}")
-    print("-" * 80)
+        if messagebox.askyesno("Удаление", f"Удалить задачу №{task_id} ?"):
+            self.tasks = [t for t in self.tasks if t['id'] != task_id]
+            # перенумеровываем
+            for i, t in enumerate(self.tasks, 1):
+                t['id'] = i
+            save_tasks(self.tasks)
+            self.update_task_list()
 
 def main():
-    tasks = load_tasks()
-    
-    while True:
-        print("\nМеню:")
-        print("1. Добавить задачу")
-        print("2. Удалить задачу")
-        print("3. Отметить выполненной")
-        print("4. Показать список задач")
-        print("5. Выход")
-        
-        choice = input("\nВыбор: ").strip()
-        
-        if choice == '1':
-            add_task(tasks)
-            save_tasks(tasks)
-        elif choice == '2':
-            delete_task(tasks)
-            save_tasks(tasks)
-        elif choice == '3':
-            complete_task(tasks)
-            save_tasks(tasks)
-        elif choice == '4':
-            list_tasks(tasks)
-        elif choice == '5':
-            save_tasks(tasks)
-            print("До встречи!")
-            break
-        else:
-            print("Неверный выбор.")
+    root = tk.Tk()
+    app = TodoApp(root)
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
