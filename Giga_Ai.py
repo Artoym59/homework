@@ -8,6 +8,8 @@ task = {
     'completed': False,
     'created_at': ''
 }
+
+#Функция проверки наличия JSON файла
 def load_tasks():
     try:
         with open('tasks.json', 'r') as file:
@@ -15,9 +17,12 @@ def load_tasks():
     except FileNotFoundError:
         return []
 
+#Функция сохранения задачи
 def save_tasks(tasks):
     with open('tasks.json', 'w') as file:
         json.dump(tasks, file, indent=4)
+
+#Функция добавления задачи
 def add_task(title):
     tasks = load_tasks()
     new_task = task.copy()
@@ -29,6 +34,7 @@ def add_task(title):
     save_tasks(tasks)
     print(f'Задача "{title}" успешно добавлена.')
 
+#Функция удаления задачи
 def remove_task(task_id):
     tasks = load_tasks()
     for index, task in enumerate(tasks):
@@ -39,6 +45,7 @@ def remove_task(task_id):
             return
     print(f'Задача с ID {task_id} не найдена.')
 
+#Функция отметки выполнения
 def mark_completed(task_id):
     tasks = load_tasks()
     for task in tasks:
@@ -49,6 +56,7 @@ def mark_completed(task_id):
             return
     print(f'Задача с ID {task_id} не найдена.')
 
+#Функция получения списка задач
 def list_tasks():
     tasks = load_tasks()
     if not tasks:
@@ -58,6 +66,8 @@ def list_tasks():
     for task in tasks:
         status = '[X]' if task['completed'] else '[ ]'
         print(f"{task['id']} | {status} | {task['title']} | Создана: {task['created_at']}")
+
+#Функция консольного приложения реализованная через цикл while
 def main():
     while True:
         print("\nМенеджер задач:")
