@@ -1,15 +1,17 @@
 import json
 from datetime import datetime
 
-# Структура задачи
+# Структура задачи с добавлением поля deadline
 task = {
     'id': None,
     'title': '',
     'completed': False,
-    'created_at': ''
+    'created_at': '',
+    'priority': '',
+    'deadline': None
 }
 
-#Функция проверки наличия JSON файла
+# Загрузка задач из файла
 def load_tasks():
     try:
         with open('tasks.json', 'r') as file:
@@ -17,24 +19,43 @@ def load_tasks():
     except FileNotFoundError:
         return []
 
-#Функция сохранения задачи
+# Сохранение задач в файл
 def save_tasks(tasks):
     with open('tasks.json', 'w') as file:
         json.dump(tasks, file, indent=4)
 
-#Функция добавления задачи
+# Добавление задачи с заданием приоритета в зависимости от дедлайна
 def add_task(title):
     tasks = load_tasks()
     new_task = task.copy()
     new_task['id'] = len(tasks) + 1
     new_task['title'] = title
     new_task['created_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
+
+    # Запрашиваем deadline
+    deadline_input = input("Введите срок выполнения задачи (формат ГГГГ-ММ-ДД ЧЧ:ММ): ")
+    if deadline_input.strip():  # Проверяем, введён ли срок
+        try:
+            new_task['deadline'] = datetime.strptime(deadline_input, '%Y-%m-%d %H:%M').isoformat()
+        except ValueError:
+            print("Неверный формат даты. Срок установлен не будет.")
+    else:
+        print("Срок не указан.")
+
+    # Устанавливаем приоритет исходя из близости дедлайна
+    current_time = datetime.now()
+    deadline_time = datetime.fromisoformat(new_task.get('deadline')) if new_task.get('deadline') else None
+    if deadline_time is not None and abs((current_time - deadline_time).total_seconds()) / 3600 < 4:
+        new_task['priority'] = 'высокий'
+    else:
+        # По умолчанию задаём низший приоритет
+        new_task['priority'] = 'низкий'
+
     tasks.append(new_task)
     save_tasks(tasks)
     print(f'Задача "{title}" успешно добавлена.')
 
-#Функция удаления задачи
+# Удаление задачи
 def remove_task(task_id):
     tasks = load_tasks()
     for index, task in enumerate(tasks):
@@ -45,7 +66,7 @@ def remove_task(task_id):
             return
     print(f'Задача с ID {task_id} не найдена.')
 
-#Функция отметки выполнения
+# Отметка задачи как выполненной
 def mark_completed(task_id):
     tasks = load_tasks()
     for task in tasks:
@@ -56,7 +77,7 @@ def mark_completed(task_id):
             return
     print(f'Задача с ID {task_id} не найдена.')
 
-#Функция получения списка задач
+# Список всех задач с учётом дедлайна
 def list_tasks():
     tasks = load_tasks()
     if not tasks:
@@ -65,9 +86,10 @@ def list_tasks():
     
     for task in tasks:
         status = '[X]' if task['completed'] else '[ ]'
-        print(f"{task['id']} | {status} | {task['title']} | Создана: {task['created_at']}")
+        deadline_str = f"(Deadline: {task['deadline']})" if task['deadline'] else ""
+        print(f"{task['id']} | {status} | {task['title']} ({task['priority'].capitalize()} {deadline_str}) | Создана: {task['created_at']}")
 
-#Функция консольного приложения реализованная через цикл while
+# Основной цикл программы
 def main():
     while True:
         print("\nМенеджер задач:")
