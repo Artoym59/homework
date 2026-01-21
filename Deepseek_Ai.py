@@ -141,6 +141,7 @@ class TodoApp:
                         print("❌ Описание задачи не может быть пустым")
                 
                 elif choice == "4":
+                    self.list_tasks(show_completed=False)
                     try:
                         task_id = int(input("Введите ID задачи для отметки как выполненной: ").strip())
                         self.complete_task(task_id)
@@ -148,6 +149,7 @@ class TodoApp:
                         print("❌ Пожалуйста, введите числовой ID")
                 
                 elif choice == "5":
+                    self.list_tasks(show_completed=True)
                     try:
                         task_id = int(input("Введите ID задачи для удаления: ").strip())
                         self.delete_task(task_id)
