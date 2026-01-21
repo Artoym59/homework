@@ -3,16 +3,19 @@ import os
 
 DB_FILE = 'tasks.json'
 
+#Функция проверки наличия JSON файла
 def load_tasks():
     if not os.path.exists(DB_FILE):
         return []
     with open(DB_FILE, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+#Функция сохранения задачи в JSON файл
 def save_tasks(tasks):
     with open(DB_FILE, 'w', encoding='utf-8') as f:
         json.dump(tasks, f, ensure_ascii=False, indent=4)
 
+#Функция загрузки задач из файла
 def show_tasks(tasks):
     if not tasks:
         print("\nСписок задач пуст.")
@@ -22,6 +25,7 @@ def show_tasks(tasks):
         status = "[X]" if task['done'] else "[ ]"
         print(f"{i}. {status} {task['title']}")
 
+#Основная функция консольного приложения, выполненная через цикл while
 def main():
     tasks = load_tasks()
     
